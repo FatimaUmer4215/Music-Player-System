@@ -1,0 +1,405 @@
+#include <SFML/Audio.hpp>
+#include <SFML/Graphics.hpp>
+#include <iostream>
+#include <cmath>
+#include <filesystem>
+const float PI = 3.14159265351;
+
+class MusicAndVideoPlayer {
+public:
+    MusicAndVideoPlayer() : window(sf::VideoMode(1080, 720), "Note Nonsense") { showWelcomeScreen(); }
+
+   void showWelcomeScreen() {
+       sf::Texture backgroundTexture;
+       if (!backgroundTexture.loadFromFile("intro.png")) {
+           std::cerr << "Error loading the background." << std::endl;
+           return;
+       }
+       sf::Sprite backgroundSprite(backgroundTexture);
+      
+
+       window.clear();
+       window.draw(backgroundSprite);
+       window.display();
+
+       sf::sleep(sf::seconds(0.5));  // Display the welcome screen for 2 seconds
+   }
+
+   
+    
+   
+   void UserInput() {
+       std::string folderPath;
+       std::cout << "Enter the path of the folder containing music files: ";
+       std::getline(std::cin, folderPath);
+
+       updateFileList(folderPath);
+
+       if (!fileList.empty()) {
+           // Display available audio files in the folder
+           std::cout << "Available music files in the folder:\n";
+           for (size_t i = 0; i < fileList.size(); ++i) {
+               std::cout << i + 1 << ". " << fileList[i] << "\n";
+           }
+
+         
+           int userChoice;
+           do {
+               std::cout << "Enter the number of the file you want to play (1-" << fileList.size() << "): ";
+               std::cin >> userChoice;
+
+               
+               if (userChoice < 1 || userChoice > static_cast<int>(fileList.size())) {
+                   std::cerr << "Invalid choice. Please enter a valid number.\n";
+               }
+           } while (userChoice < 1 || userChoice > static_cast<int>(fileList.size()));
+
+           // Set the selected file index based on user input
+           selectedFileIndex = userChoice - 1;
+           playSelectedFile();
+       }
+       else {
+           std::cerr << "No music files found in the specified folder." << std::endl;
+       }
+   }
+
+
+private:
+    sf::RenderWindow window;
+    sf::Font font;
+    sf::Text text;
+    std::vector<std::string> fileList;
+    int selectedFileIndex;
+    sf::Music music;
+    sf::Sprite image;
+    sf::Texture imageTexture; 
+    sf::Text songNameText;
+    std::vector<sf::CircleShape> beatWaves;
+    std::string getImagePathForFile(const std::string& fileName) {
+        
+        return fileName.substr(0, fileName.find_last_of('.')) + ".png";
+    }
+  
+    void updateFileList(const std::string& folderPath) {
+        try {
+           
+            fileList.clear();
+
+       
+            for (const auto& entry : std::filesystem::directory_iterator(folderPath)) {
+                if (entry.is_regular_file() && entry.path().extension() == ".mp3") {
+                    fileList.push_back(entry.path().string());
+                }
+            }
+
+            std::string displayText = "Select a file to play:\n";
+            for (size_t i = 0; i < fileList.size(); ++i) {
+                displayText += std::to_string(i + 1) + ". " + fileList[i] + "\n";
+            }
+            text.setString(displayText);
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Error updating file list: " << e.what() << std::endl;
+        }
+    }
+
+    void playSelectedFile() {
+        if (selectedFileIndex >= 0 && selectedFileIndex < static_cast<int>(fileList.size())) {
+            std::string selectedFile = fileList[selectedFileIndex];
+            std::cout << "Selected file: " << selectedFile << std::endl;
+
+        
+            music.stop();
+
+            
+            if (music.openFromFile(selectedFile)) {
+                music.play();
+
+
+                std::string imagePath = getImagePathForFile(selectedFile);
+                if (imageTexture.loadFromFile(imagePath)) {
+                    image.setTexture(imageTexture);
+                    
+                    image.setPosition(20.f, 20.f);
+                }
+                else {
+                    std::cerr << "Error loading image for the selected file." << std::endl;
+                }
+
+                playMusicWithInterference();
+            }
+            else {
+                std::cerr << "Error loading and playing the selected file." << std::endl;
+            }
+        }
+    }
+
+   
+
+    void playNextSong() {
+        selectedFileIndex = (selectedFileIndex + 1) % fileList.size();
+        playSelectedFile();
+    }
+
+    void playPreviousSong() {
+        selectedFileIndex = (selectedFileIndex - 1 + fileList.size()) % fileList.size();
+        playSelectedFile();
+    }
+
+    void increaseVolume() {
+        float newVolume = music.getVolume() + 10.0f;
+        music.setVolume(std::min(newVolume, 100.0f));  // Limit volume to 30
+    }
+
+    void decreaseVolume() {
+        float newVolume = music.getVolume() - 10.0f;
+        music.setVolume(std::max(newVolume, 0.0f));    // Limit volume to 0
+    }
+    bool isWithinBounds(float mouseX, float mouseY, const sf::Sprite& button) {
+        sf::FloatRect bounds = button.getGlobalBounds();
+        return bounds.contains(mouseX, mouseY);
+    }
+    bool isWithinBounds(float mouseX, float mouseY, const sf::RectangleShape& bar) {
+        sf::FloatRect bounds = bar.getGlobalBounds();
+        return bounds.contains(mouseX, mouseY);
+    }
+
+    void playMusicWithInterference() {
+   
+        bool isPlaying = true; // Initially playing
+        bool isPaused = false;
+
+        // Load background image
+        sf::Texture backgroundTexture;
+        if (!backgroundTexture.loadFromFile("aa.png")) {
+            std::cerr << "Error loading background image." << std::endl;
+            return;
+        }
+        sf::Sprite background(backgroundTexture);
+        background.setPosition(-13,-13);
+
+        sf::Font songNameFont;
+        if (!songNameFont.loadFromFile("bv.ttf")) {
+            std::cerr << "Error loading font for the song name." << std::endl;
+            return;
+        }
+
+  
+        songNameText.setFont(songNameFont);
+        songNameText.setCharacterSize(44);
+        songNameText.setFillColor(sf::Color::White);
+        songNameText.setPosition(window.getSize().x/2, 100.f);
+
+      
+        sf::Texture playTexture;
+        sf::Texture nextTexture;
+        sf::Texture prevTexture;
+        sf::Texture pauseTexture;
+        sf::Texture voloumeTexture;
+        if (!playTexture.loadFromFile("play.png") ||
+            !nextTexture.loadFromFile("next.png") ||
+            !prevTexture.loadFromFile("pervi.png") ||
+            !pauseTexture.loadFromFile("pause.png")||
+            !voloumeTexture.loadFromFile("voloume.png")) {
+            std::cerr << "Error loading button textures." << std::endl;
+            return;
+        }
+
+        sf::Sprite playButton(playTexture);
+        sf::Sprite nextButton(nextTexture);
+        sf::Sprite prevButton(prevTexture);
+        sf::Sprite pauseButton(pauseTexture);
+        sf::Sprite voloumeButton(voloumeTexture);
+        playButton.setPosition(window.getSize().x / 2-35, 500); 
+        nextButton.setPosition(window.getSize().x / 2 + 81, 514); 
+        prevButton.setPosition(window.getSize().x / 2 - 129, 514);
+        pauseButton.setPosition(window.getSize().x / 2-35, 500);
+        voloumeButton.setPosition(window.getSize().x - 78, window.getSize().y - 55.f);
+        
+        // Volume bar
+        sf::Color Color1(40, 8, 53);
+        sf::Color Color2(157, 21, 2);
+        sf::RectangleShape volumeBar;
+        float volume = music.getVolume() * 20.0f;  // Normalize volume to a range of 0 to 1
+        volumeBar.setSize(sf::Vector2f(600.f, 1000.f * volume));  // Set size to 30x30 pixels
+     
+        volumeBar.setFillColor(sf::Color::Yellow);
+        volumeBar.setPosition(window.getSize().x-43, window.getSize().y - 27.f);
+        volumeBar.setRotation(270);
+        //Seek bar
+        sf::RectangleShape seekBar;
+        seekBar.setSize(sf::Vector2f(window.getSize().x, 10.f));
+        seekBar.setFillColor(Color2);
+        seekBar.setPosition(0.f, window.getSize().y - 10.f);
+
+        while (window.isOpen()) {
+            sf::Event event;
+            while (window.pollEvent(event)) {
+                if (event.type == sf::Event::Closed) {
+                    window.close();
+                }
+              
+                
+                else if (event.type == sf::Event::MouseButtonPressed) {
+                    if (event.mouseButton.button == sf::Mouse::Left) {
+                 
+                        float mouseX = static_cast<float>(event.mouseButton.x);
+                        float mouseY = static_cast<float>(event.mouseButton.y);
+                        if (event.mouseButton.button == sf::Mouse::Left) {
+                           
+                            float mouseX = static_cast<float>(event.mouseButton.x);
+                            float mouseY = static_cast<float>(event.mouseButton.y);
+
+                           
+                            if (isWithinBounds(mouseX, mouseY, volumeBar)) {
+                                // Calculate the new volume based on the mouse position
+                                float newVolume = 1.0f - ((mouseY - volumeBar.getPosition().y) / volumeBar.getSize().y);
+                                newVolume = std::max(0.0f, std::min(5.0f, newVolume));
+                                music.setVolume(newVolume * 10.0f);    // Set volume in the range of 0 to 100
+                            }
+                            if (isWithinBounds(mouseX, mouseY, seekBar)) {
+                             
+                                float newPosition = 1.0f - ((mouseY - seekBar.getPosition().y) / seekBar.getSize().y);
+                                newPosition = std::max(0.0f, std::min(0.5f, newPosition));
+                                sf::Time newSeekPosition = sf::seconds(newPosition * music.getDuration().asSeconds());
+                                music.setPlayingOffset(newSeekPosition);    // Set volume in the range of 0 to 100
+                            }
+                        }
+                      
+                        if (isWithinBounds(mouseX, mouseY, playButton)) {
+                            if (isPlaying) {
+                                music.pause();
+                                isPaused = true;
+                            }
+                            else {
+                                music.play();
+                                isPaused = false;
+                            }
+                            isPlaying = !isPlaying;
+                        }
+                        else if (isWithinBounds(mouseX, mouseY, nextButton)) {
+                            playNextSong();
+                        }
+                        else if (isWithinBounds(mouseX, mouseY, prevButton)) {
+                            playPreviousSong();
+                        }
+                        else if (isWithinBounds(mouseX, mouseY,voloumeButton )) {
+                            if (music.getVolume() > 0.f) { music.setVolume(0); }
+                            else music.setVolume(100);
+                        }
+                       
+                    }
+                }
+            
+                else if (event.type == sf::Event::KeyPressed) {
+                    if (event.key.code == sf::Keyboard::Space) {
+                        if (isPlaying) {
+                            music.pause();
+                            isPaused = true;
+                        }
+                        else {
+                            music.play();
+                            isPaused = false;
+                        }
+                        isPlaying = !isPlaying;
+                    }
+                
+                    else if (event.key.code == sf::Keyboard::N) {
+                        // Play next song in the playlist
+                        playNextSong();
+                    }
+                    else if (event.key.code == sf::Keyboard::P) {
+                        
+                        playPreviousSong();
+                    }
+                    else if (event.key.code == sf::Keyboard::Up) {
+                       
+                        increaseVolume();
+                    }
+                    else if (event.key.code == sf::Keyboard::Down) {
+                      
+                        decreaseVolume();
+                    }
+                    else if (event.key.code == sf::Keyboard::M) {
+                        if (music.getVolume() > 0.f) { music.setVolume(0); }
+                        else music.setVolume(100);
+                    }
+                    else if (event.type == sf::Event::MouseButtonPressed) {
+                        if (event.mouseButton.button == sf::Mouse::Left) {
+                            // handleMouseClick(event.mouseButton.x, event.mouseButton.y);
+
+                        }
+                    }
+                        else if (event.key.code == sf::Keyboard::Right) {
+                            playNextSong();
+                        }
+                        else if (event.key.code == sf::Keyboard::Left) {
+                            playPreviousSong();
+                        }
+                        else if (event.key.code == sf::Keyboard::Up) {
+                            increaseVolume();
+                        }
+                        else if (event.key.code == sf::Keyboard::Down) {
+                            decreaseVolume();
+                        }
+                        else if (event.key.code == sf::Keyboard::Escape) {
+                             window.close(); 
+                        }
+                        
+                        
+                    
+                    
+                    
+                }
+
+            }
+               if (selectedFileIndex >= 0 && selectedFileIndex < static_cast<int>(fileList.size())) {
+                  std::string selectedFileName = fileList[selectedFileIndex];
+                  std::size_t found = selectedFileName.find_last_of("/\\");
+                  std::string songName = (found != std::string::npos) ? selectedFileName.substr(found + 1) : selectedFileName;
+
+                  songNameText.setString("Now Playing: " + songName);
+                }
+            
+         
+            float volume = music.getVolume() / 100.0f;  
+            volumeBar.setSize(sf::Vector2f(150.f * volume, 10.f)); 
+
+           
+
+            
+            float musicDuration = music.getDuration().asSeconds();
+            float progress = music.getPlayingOffset().asSeconds() / musicDuration;
+            seekBar.setSize(sf::Vector2f(window.getSize().x * progress, 10.f));
+
+            window.clear();
+          
+            window.draw(background);
+            window.draw(image);
+
+            if (isPlaying) {
+                window.draw(pauseButton);
+            }
+            else {
+                window.draw(playButton);
+            }
+       
+            window.draw(songNameText);
+            window.draw(nextButton);
+            window.draw(prevButton);
+            window.draw(voloumeButton);
+            window.draw(volumeBar);
+            window.draw(seekBar);
+            window.display();
+        }
+    }
+};
+
+int main() {
+    MusicAndVideoPlayer player;
+  
+    player.UserInput();
+  
+
+    return 0;
+}
